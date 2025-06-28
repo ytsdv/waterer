@@ -1,27 +1,13 @@
 @import "tailwindcss";
+@plugin '@tailwindcss/typography';
 
-/* Custom CSS Variables for Design System */
+/* Custom CSS Variables for Design System - Tailwind v4 Format */
 :root {
-  /* Primary Colors */
-  --primary-500: #2563eb;
-  --primary-600: #1d4ed8;
-  --primary-700: #1e40af;
-
-  /* Success Green */
-  --success-500: #10b981;
-  --success-600: #059669;
-
-  /* Water Blue Accent */
-  --water-blue: #3b82f6;
-
-  /* Background Colors */
-  --bg-light: #f6f6f6;
-  --bg-dark: #1a1a1a;
-  --surface-light: #ffffff;
-  --surface-dark: #2a2a2a;
+  /* Custom Font Family */
+  --font-family-sans: Inter, Avenir, Helvetica, Arial, sans-serif;
 
   /* Base theme */
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  font-family: var(--font-family-sans);
   color: #0f0f0f;
   background-color: var(--bg-light);
   font-synthesis: none;
@@ -29,6 +15,34 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
+}
+
+@theme {
+  /* Custom Colors - Using Tailwind v4 --color-* convention */
+  --color-primary-400: oklch(
+    0.64 0.18 240
+  ); /* #3b82f6 - lighter blue for dark mode */
+  --color-primary-500: oklch(0.54 0.2 240); /* #2563eb */
+  --color-primary-600: oklch(0.45 0.22 240); /* #1d4ed8 */
+  --color-primary-700: oklch(0.39 0.19 240); /* #1e40af */
+  --color-primary-800: oklch(0.32 0.16 240); /* #1e3a8a - darker blue */
+
+  --color-success-500: oklch(0.67 0.15 165); /* #10b981 */
+  --color-success-600: oklch(0.59 0.15 165); /* #059669 */
+
+  --color-destructive-50: oklch(0.971 0.013 17.38); /* #fef2f2 */
+  --color-destructive-600: oklch(0.54 0.22 25.331); /* #dc2626 */
+  --color-destructive-700: oklch(0.457 0.204 27.523); /* #b91c1c */
+  --color-destructive-900: oklch(0.314 0.134 26.207); /* #7f1d1d */
+  --color-destructive-300: oklch(0.735 0.126 27.158); /* #fca5a5 */
+
+  --color-water-blue: oklch(0.6 0.17 240); /* #3b82f6 */
+
+  /* Background Colors */
+  --bg-light: #f6f6f6;
+  --bg-dark: #1a1a1a;
+  --surface-light: #ffffff;
+  --surface-dark: #2a2a2a;
 }
 
 @media (prefers-color-scheme: dark) {

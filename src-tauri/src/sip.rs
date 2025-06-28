@@ -2,6 +2,8 @@ use chrono::{self, DateTime, Local, NaiveTime, Timelike, Utc};
 use serde::Serialize;
 use sqlx::{prelude::FromRow, Pool, Sqlite};
 
+use crate::db::DatabaseState;
+
 #[derive(Debug, FromRow, Serialize)]
 pub struct Sip {
     pub id: i64,
@@ -118,5 +120,18 @@ impl SipState {
 
         let new_state = self.read_from_db(pool).await;
         *self = new_state;
+    }
+}
+
+#[tauri::command]
+pub async fn get_sips(db_state: tauri::State<'_, DatabaseState>) -> Result<Vec<Sip>, String> {
+    let pool = &db_state.0;
+
+    match sqlx::query_as::<_, Sip>("SELECT * FROM sips ORDER BY created_at DESC")
+        .fetch_all(pool)
+        .await
+    {
+        Ok(sips) => Ok(sips),
+        Err(e) => Err(format!("Failed to fetch sips: {}", e)),
     }
 }

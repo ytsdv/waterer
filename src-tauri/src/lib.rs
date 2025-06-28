@@ -16,7 +16,7 @@ use crate::{
     db::DatabaseState,
     notification::notify_sip,
     settings::AppSettings,
-    sip::{Sip, SipState},
+    sip::{get_sips, Sip, SipState},
 };
 
 struct AppState {
@@ -128,15 +128,15 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![])
+        .invoke_handler(tauri::generate_handler![get_sips])
         .setup(|app| {
             let app_settings = AppSettings::load();
             app.manage(app_settings);
 
             // Minimize the main window on startup
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.minimize();
-                let _ = window.hide();
+                //let _ = window.minimize();
+                //let _ = window.hide();
             }
 
             println!("tray icon built");
