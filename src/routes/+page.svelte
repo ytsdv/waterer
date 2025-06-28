@@ -54,10 +54,10 @@
 
 </script>
 
-<main class="mx-auto px-8 max-w-4xl max-h-screen overflow-y-auto">
+<main class="mx-auto px-8 max-w-4xl h-screen sm:px-4 overflow-y-auto flex flex-col">
   <h1 class="text-center mb-8 text-4xl font-semibold">💧 Water Tracker</h1>
 
-  <div class="flex gap-4 mb-8 justify-center">
+  <div class="flex gap-4 mb-8 justify-center items-center">
     <StatCard title="Total Sips" value={sips.length} />
     <StatCard title="Total Amount" value="{getTotalAmount()}ml" />
   </div>
