@@ -2,6 +2,8 @@
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { StatCard, Button, ErrorMessage, SipsList, type Sip } from "$lib/components";
+  import { listen } from '@tauri-apps/api/event';
+  import { getAppState } from "$lib/AppState.svelte";
 
   let sips = $state<Sip[]>([]);
   let loading = $state(true);
@@ -26,8 +28,6 @@
   }
 
   async function updateSips() {
-    console.log("updating sips");
-    
     try {
       const result = await invoke("get_sips");
       sips = result as Sip[];
@@ -42,15 +42,11 @@
 
   $effect(() => {
     loadSips();
-
     interval = setInterval(updateSips, 1000);
-
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
   });
+
+
+  const appState = getAppState();
 
 </script>
 
@@ -60,6 +56,23 @@
   <div class="flex gap-4 mb-8 justify-center items-center">
     <StatCard title="Total Sips" value={sips.length} />
     <StatCard title="Total Amount" value="{getTotalAmount()}ml" />
+  </div>
+
+  <div class="flex gap-4 mb-8 justify-center items-center">
+    <Button onclick={() => {
+      invoke("toggle_timer");
+    }}>
+      {#if appState.timerStarted}
+        Stop Timer
+      {:else}
+        Start Timer
+      {/if}
+    </Button>
+    <Button onclick={() => {
+      invoke("take_sip");
+    }}>
+      Take a sip
+    </Button>
   </div>
 
   {#if error}

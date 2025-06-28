@@ -1,9 +1,10 @@
 use std::{error::Error, sync::Mutex as SyncMutex};
 
+use serde::Serialize;
 use tauri::{
     menu::{AboutMetadataBuilder, IsMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::{TrayIconBuilder, TrayIconEvent, TrayIconId},
-    AppHandle, EventLoopMessage, Manager, UserAttentionType, Wry,
+    AppHandle, Emitter, EventLoopMessage, Manager, UserAttentionType, Wry,
 };
 use tokio::{sync::Mutex, time::Duration};
 mod db;
@@ -16,19 +17,18 @@ use crate::{
     db::DatabaseState,
     notification::notify_sip,
     settings::AppSettings,
-    sip::{get_sips, Sip, SipState},
+    sip::{get_sips, SipState},
 };
 
+#[derive(Serialize, Clone)]
 struct AppState {
     timer_started: bool,
-    tray_menu_open: bool,
 }
 
 impl AppState {
     fn new() -> Self {
         Self {
             timer_started: false,
-            tray_menu_open: false,
         }
     }
 
@@ -42,14 +42,6 @@ impl AppState {
         if self.timer_started {
             self.timer_started = false;
         }
-    }
-
-    fn open_tray_menu(&mut self) {
-        self.tray_menu_open = true
-    }
-
-    fn close_tray_menu(&mut self) {
-        self.tray_menu_open = false
     }
 }
 
@@ -123,12 +115,33 @@ fn update_tray_menu(
     Ok(())
 }
 
+#[tauri::command]
+async fn toggle_timer(
+    app: tauri::AppHandle,
+    app_state: tauri::State<'_, SyncMutex<AppState>>,
+) -> Result<(), String> {
+    use tauri::Emitter;
+
+    println!("toggle timer");
+    let mut app_state = app_state.lock().map_err(|e| e.to_string())?;
+    if app_state.timer_started {
+        app_state.stop_timer();
+    } else {
+        app_state.start_timer();
+    }
+
+    app.emit("update-app-state", app_state.clone())
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![get_sips])
+        .invoke_handler(tauri::generate_handler![get_sips, toggle_timer])
         .setup(|app| {
             let app_settings = AppSettings::load();
             app.manage(app_settings);

@@ -1,8 +1,8 @@
+use crate::{db::DatabaseState, AppState};
 use chrono::{self, DateTime, Local, NaiveTime, Timelike, Utc};
 use serde::Serialize;
 use sqlx::{prelude::FromRow, Pool, Sqlite};
-
-use crate::db::DatabaseState;
+use std::sync::Mutex as SyncMutex;
 
 #[derive(Debug, FromRow, Serialize)]
 pub struct Sip {
