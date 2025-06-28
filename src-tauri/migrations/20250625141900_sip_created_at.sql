@@ -1,0 +1,4 @@
+-- Add migration script here
+
+ALTER TABLE sips ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE sips DROP COLUMN date;

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE sips SET notified_user = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "9e5b775db67d750feb476e1efe310455a0554bb2cfacb9c6a8242dc3737c03d3"
+}
