@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+/* Custom CSS Variables for Design System */
+:root {
+  /* Primary Colors */
+  --primary-500: #2563eb;
+  --primary-600: #1d4ed8;
+  --primary-700: #1e40af;
+
+  /* Success Green */
+  --success-500: #10b981;
+  --success-600: #059669;
+
+  /* Water Blue Accent */
+  --water-blue: #3b82f6;
+
+  /* Background Colors */
+  --bg-light: #f6f6f6;
+  --bg-dark: #1a1a1a;
+  --surface-light: #ffffff;
+  --surface-dark: #2a2a2a;
+
+  /* Base theme */
+  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  color: #0f0f0f;
+  background-color: var(--bg-light);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #f6f6f6;
+    background-color: var(--bg-dark);
+  }
+}
