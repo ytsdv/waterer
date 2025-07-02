@@ -4,7 +4,6 @@ use std::{
 };
 
 use sqlx::{sqlite::SqliteConnectOptions, Pool, Sqlite, SqlitePool};
-use tauri::AppHandle;
 
 const DB_NAME: &str = "waterer.db";
 

@@ -2,9 +2,9 @@ use std::{error::Error, sync::Mutex as SyncMutex};
 
 use serde::Serialize;
 use tauri::{
-    menu::{AboutMetadataBuilder, IsMenuItem, Menu, MenuItem, PredefinedMenuItem},
-    tray::{TrayIconBuilder, TrayIconEvent, TrayIconId},
-    AppHandle, Emitter, EventLoopMessage, Manager, UserAttentionType, Wry,
+    menu::{Menu, MenuItem, PredefinedMenuItem},
+    tray::{TrayIconBuilder, TrayIconEvent},
+    AppHandle, Manager, UserAttentionType, Wry,
 };
 use tokio::{sync::Mutex, time::Duration};
 mod db;
@@ -119,26 +119,36 @@ fn update_tray_menu(
 async fn toggle_timer(
     app: tauri::AppHandle,
     app_state: tauri::State<'_, SyncMutex<AppState>>,
+    sip_state: tauri::State<'_, Mutex<SipState>>,
 ) -> Result<(), String> {
     use tauri::Emitter;
 
     println!("toggle timer");
-    let mut app_state = app_state.lock().map_err(|e| e.to_string())?;
-    if app_state.timer_started {
-        app_state.stop_timer();
-    } else {
-        app_state.start_timer();
+    let timer_started = {
+        let mut app_state = app_state.lock().map_err(|e| e.to_string())?;
+        if app_state.timer_started {
+            app_state.stop_timer();
+        } else {
+            app_state.start_timer();
+        }
+        app.emit("update-app-state", app_state.clone())
+            .map_err(|e| e.to_string())?;
+
+        app_state.timer_started
+    };
+
+    let locked_sip_state = sip_state.lock().await;
+
+    if let Err(e) = update_tray_menu(&app, timer_started, &locked_sip_state) {
+        eprintln!("Failed to update tray menu: {}", e);
     }
-
-    app.emit("update-app-state", app_state.clone())
-        .map_err(|e| e.to_string())?;
-
     Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![get_sips, toggle_timer])
@@ -164,7 +174,7 @@ pub fn run() {
                 // Clone the pool before moving it
                 let cloned_pool = database.pool.clone();
 
-                let sip_state = SipState::new().read_from_db(&cloned_pool).await;
+                let sip_state = SipState::default().read_from_db(&cloned_pool).await;
 
                 (db::DatabaseState(database.pool), sip_state)
             });
@@ -198,7 +208,7 @@ pub fn run() {
 
                     let sip_state = app_handle.state::<Mutex<SipState>>();
                     let mut locked_sip_state = sip_state.lock().await;
-                    update_tray_menu(&app_handle, timer_started, &locked_sip_state);
+                    //
 
                     if !timer_started {
                         continue;
@@ -228,12 +238,14 @@ pub fn run() {
 
             let menu = get_menu_with_items(&app_handle, 0, false)?;
 
+            let tray_on_left_click = tauri_plugin_os::platform() == "macos";
+
             _ = TrayIconBuilder::with_id("main")
                 .icon(app.default_window_icon().unwrap().clone())
                 .tooltip(app.package_info().name.clone())
                 .menu(&menu)
-                .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id.as_ref() {
+                .show_menu_on_left_click(tray_on_left_click)
+                .on_menu_event(move |app, event| match event.id.as_ref() {
                     "quit" => {
                         println!("quit menu item was clicked");
                         app.exit(0);
@@ -244,6 +256,8 @@ pub fn run() {
                         toggle_window_visibility(app);
                     }
                     "start" => {
+                        use tauri::Emitter;
+
                         println!("start menu item was clicked");
                         let app_state = app.state::<SyncMutex<AppState>>();
                         let mut app_state = app_state.lock().unwrap();
@@ -252,11 +266,28 @@ pub fn run() {
                         } else {
                             app_state.start_timer();
                         }
+                        let sip_state = app.state::<Mutex<SipState>>();
+                        let locked_sip_state =
+                            tauri::async_runtime::block_on(async { sip_state.lock().await });
+                        if let Err(e) = update_tray_menu(
+                            &app_handle,
+                            app_state.timer_started,
+                            &locked_sip_state,
+                        ) {
+                            eprintln!("Failed to update tray menu: {}", e);
+                        }
+
+                        if let Err(e) = app_handle.emit("update-app-state", app_state.clone()) {
+                            eprintln!("Failed to update app_state: {}", e);
+                        }
                     }
                     "sip" => {
                         println!("sip menu item was clicked");
                         let db_state = app.state::<DatabaseState>();
                         let pool = &db_state.0;
+
+                        let app_state = app.state::<SyncMutex<AppState>>();
+                        let app_state = app_state.lock().unwrap();
 
                         let sip_state = app.state::<Mutex<SipState>>();
 
@@ -267,6 +298,14 @@ pub fn run() {
                                 Ok(new_state) => {
                                     *locked_sip_state = new_state;
                                     println!("Updated sip state");
+
+                                    if let Err(e) = update_tray_menu(
+                                        &app_handle,
+                                        app_state.timer_started,
+                                        &locked_sip_state,
+                                    ) {
+                                        eprintln!("Failed to update tray menu: {}", e);
+                                    }
                                 }
                                 Err(e) => {
                                     eprintln!("Failed to take sip: {}", e);

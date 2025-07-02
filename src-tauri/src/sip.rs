@@ -1,8 +1,7 @@
-use crate::{db::DatabaseState, AppState};
-use chrono::{self, DateTime, Local, NaiveTime, Timelike, Utc};
+use crate::db::DatabaseState;
+use chrono::{self, DateTime, Local, NaiveTime, Utc};
 use serde::Serialize;
 use sqlx::{prelude::FromRow, Pool, Sqlite};
-use std::sync::Mutex as SyncMutex;
 
 #[derive(Debug, FromRow, Serialize)]
 pub struct Sip {
@@ -12,7 +11,7 @@ pub struct Sip {
     pub notified_user: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SipState {
     last_sip_timestamp: i64,
     total_sips_today: i64,
@@ -26,25 +25,23 @@ pub struct SipState {
 const SIP_INTERVAL_SECONDS: i64 = 10;
 
 impl SipState {
-    pub fn new() -> Self {
-        Self {
-            last_sip_timestamp: 0,
-            total_sips_today: 0,
-            total_amount_today: 0,
-            total_sips_all_time: 0,
-            total_amount_all_time: 0,
-            notified_user: false,
-            last_sip_id: None,
-        }
-    }
-
     pub async fn read_from_db(&self, pool: &Pool<Sqlite>) -> Self {
         let sips = sqlx::query_as::<_, Sip>("SELECT * FROM sips ORDER BY created_at DESC")
             .fetch_all(pool)
             .await
             .unwrap();
 
-        let last_sip_timestamp_parsed = sips[0].created_at;
+        if sips.is_empty() {
+            return Self::default();
+        }
+
+        let last_sip = sips.first();
+
+        if last_sip.is_none() {
+            return Self::default();
+        }
+
+        let last_sip_timestamp_parsed = last_sip.unwrap().created_at;
 
         let mut total_amount_all_time = 0;
         let mut total_amount_today = 0;
@@ -135,3 +132,10 @@ pub async fn get_sips(db_state: tauri::State<'_, DatabaseState>) -> Result<Vec<S
         Err(e) => Err(format!("Failed to fetch sips: {}", e)),
     }
 }
+
+// #[derive(Debug, Serialize)]
+// pub enum Error {
+//     String(String),
+// }
+
+// pub type Result<T> = std::result::Result<T, Error>;
