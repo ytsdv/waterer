@@ -1,85 +1,50 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { onMount } from "svelte";
-  import { StatCard, Button, ErrorMessage, SipsList, type Sip } from "$lib/components";
-  import { listen } from '@tauri-apps/api/event';
+  import {
+    StatCard,
+    Button,
+    ErrorMessage,
+    SipsList,
+    TimerIndicator,
+    type Sip,
+  } from "$lib/components";
   import { getAppState } from "$lib/AppState.svelte";
+  import { getSipState } from "$lib/SipState.svelte";
+  import { getSettingsState } from "$lib/SettingsState.svelte";
 
-  let sips = $state<Sip[]>([]);
-  let loading = $state(true);
-  let error = $state("");
-
-  async function loadSips() {
-    try {
-      loading = true;
-      error = "";
-      const result = await invoke("get_sips");
-      sips = result as Sip[];
-    } catch (err) {
-      error = `Failed to load sips: ${err}`;
-      console.error("Error loading sips:", err);
-    } finally {
-      loading = false;
-    }
-  }
-
-  function getTotalAmount(): number {
-    return sips.reduce((total, sip) => total + sip.amount, 0);
-  }
-
-  async function updateSips() {
-    try {
-      const result = await invoke("get_sips");
-      sips = result as Sip[];
-    } catch (err) {
-      error = `Failed to load sips: ${err}`;
-      console.error("Error loading sips:", err);
-    } finally {
-    }
-  }
-
-  let interval = $state<number | null>(null);
-
-  $effect(() => {
-    loadSips();
-    interval = setInterval(updateSips, 1000);
-  });
-
-
+  const sipState = getSipState();
   const appState = getAppState();
-
+  const settingsState = getSettingsState();
 </script>
 
-<main class="mx-auto px-8 max-w-4xl h-screen sm:px-4 overflow-y-auto flex flex-col">
-  <h1 class="text-center mb-8 text-4xl font-semibold">💧 Water Tracker</h1>
-
+<main
+  class="mx-auto px-8 max-w-4xl h-screen sm:px-4 overflow-y-auto flex flex-col"
+>
   <div class="flex gap-4 mb-8 justify-center items-center">
-    <StatCard title="Total Sips" value={sips.length} />
-    <StatCard title="Total Amount" value="{getTotalAmount()}ml" />
+    <StatCard title="Total Sips" value={sipState.sips.length} />
+    <StatCard title="Total Amount" value="{sipState.totalAmount}ml" />
   </div>
 
   <div class="flex gap-4 mb-8 justify-center items-center">
-    <Button onclick={() => {
-      invoke("toggle_timer");
-    }}>
-      {#if appState.timerStarted}
-        Stop Timer
-      {:else}
-        Start Timer
-      {/if}
-    </Button>
-    <Button onclick={() => {
-      invoke("take_sip");
-    }}>
-      Take a sip
+    <Button
+      onclick={async () => {
+        try {
+          await invoke("take_sip", {
+            amount: settingsState.settings.sipAmountMl,
+          });
+          sipState.updateSips();
+        } catch (error) {
+          console.error("Error taking sip:", error);
+        }
+      }}
+    >
+      Take a sip ({settingsState.settings.sipAmountMl}ml)
     </Button>
   </div>
 
-  {#if error}
-    <ErrorMessage message={error} />
+  {#if sipState.error}
+    <ErrorMessage message={sipState.error} />
   {/if}
 
-  <SipsList {sips} {loading} />
+  <SipsList sips={sipState.sips} loading={sipState.loading} />
 </main>
-
-

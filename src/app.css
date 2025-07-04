@@ -15,6 +15,8 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
+
+  user-select: none;
 }
 
 @theme {
@@ -46,8 +48,18 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
     color: #f6f6f6;
     background-color: var(--bg-dark);
   }
+}
+
+:root.dark {
+  color: #f6f6f6;
+  background-color: var(--bg-dark);
+}
+
+:root.light {
+  color: #0f0f0f;
+  background-color: var(--bg-light);
 }

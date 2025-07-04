@@ -1,8 +1,10 @@
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getContext, setContext } from "svelte";
 
 type TAppState = {
   timerStarted: boolean;
+  updateAppState: () => Promise<void>;
 };
 
 type UpdateAppStateEventPayload = {
@@ -10,10 +12,10 @@ type UpdateAppStateEventPayload = {
 };
 
 export class AppState implements TAppState {
-  timerStarted: boolean;
+  timerStarted: boolean = $state(false);
 
   constructor() {
-    this.timerStarted = $state(false);
+    this.updateAppState();
 
     $effect(() => {
       const unlistenFn = listen<UpdateAppStateEventPayload>(
@@ -28,6 +30,15 @@ export class AppState implements TAppState {
         unlistenFn.then((unlisten) => unlisten());
       };
     });
+  }
+
+  async updateAppState(): Promise<void> {
+    try {
+      const result = await invoke<UpdateAppStateEventPayload>("get_app_state");
+      this.timerStarted = result.timer_started;
+    } catch (err) {
+      console.error("Failed to load app state:", err);
+    }
   }
 }
 

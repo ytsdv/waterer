@@ -1,23 +1,21 @@
-use std::{error::Error, sync::Mutex as SyncMutex};
+use std::sync::Mutex as SyncMutex;
 
 use serde::Serialize;
-use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::{TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, UserAttentionType, Wry,
-};
+use tauri::{Manager, RunEvent};
 use tokio::{sync::Mutex, time::Duration};
 mod db;
 use db::init_db;
 mod notification;
 mod settings;
 mod sip;
+mod tray;
 
 use crate::{
     db::DatabaseState,
     notification::notify_sip,
     settings::AppSettings,
     sip::{get_sips, SipState},
+    tray::{create_tray, update_timer_menu_item},
 };
 
 #[derive(Serialize, Clone)]
@@ -45,124 +43,88 @@ impl AppState {
     }
 }
 
-fn toggle_window_visibility(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        if window.is_visible().unwrap() {
-            window.hide().unwrap();
-        } else {
-            window.show().unwrap();
-            window
-                .request_user_attention(Some(UserAttentionType::Informational))
-                .unwrap_or_default();
-        }
-    }
-}
-
-fn get_menu_with_items(
-    app_handle: &AppHandle,
-    total_sip_amount_today: i64,
-    timer_started: bool,
-) -> Result<Menu<Wry>, tauri::Error> {
-    let menu_item_show = MenuItem::with_id(app_handle, "show", "Show", true, None::<&str>)?;
-    let menu_separator = PredefinedMenuItem::separator(app_handle)?;
-
-    // Dynamic menu item based on timer state
-    let timer_text = if timer_started {
-        "Stop Timer"
-    } else {
-        "Start Timer"
-    };
-    let menu_item_timer = MenuItem::with_id(app_handle, "start", timer_text, true, None::<&str>)?;
-
-    // Dynamic sip menu item with current state info
-    let sip_text = format!("Sip ({}ml today)", total_sip_amount_today); // You'll need to add this getter
-    let menu_item_sip = MenuItem::with_id(app_handle, "sip", &sip_text, true, None::<&str>)?;
-
-    let menu_item_quit = MenuItem::with_id(app_handle, "quit", "Quit", true, None::<&str>)?;
-
-    // Create new menu
-    Menu::with_items(
-        app_handle,
-        &[
-            &menu_item_show,
-            &menu_separator,
-            &menu_item_timer,
-            &menu_item_sip,
-            &menu_separator,
-            &menu_item_quit,
-        ],
-    )
-}
-
-fn update_tray_menu(
-    app_handle: &AppHandle,
-    timer_started: bool,
-    sip_state: &SipState,
-) -> Result<(), Box<dyn Error>> {
-    let tray = app_handle.tray_by_id("main");
-
-    if tray.is_none() {
-        return Err("test".into());
-    }
-    let tray = tray.unwrap();
-
-    // Create new menu
-    let new_menu = get_menu_with_items(app_handle, sip_state.total_amount_today, timer_started)?;
-
-    // Update the tray menu
-    tray.set_menu(Some(new_menu))?;
-
-    Ok(())
-}
-
 #[tauri::command]
 async fn toggle_timer(
     app: tauri::AppHandle,
     app_state: tauri::State<'_, SyncMutex<AppState>>,
-    sip_state: tauri::State<'_, Mutex<SipState>>,
+    _sip_state: tauri::State<'_, Mutex<SipState>>,
 ) -> Result<(), String> {
     use tauri::Emitter;
 
     println!("toggle timer");
-    let timer_started = {
+    let _timer_started = {
         let mut app_state = app_state.lock().map_err(|e| e.to_string())?;
+
         if app_state.timer_started {
             app_state.stop_timer();
         } else {
             app_state.start_timer();
         }
+
+        // Update the tray menu item
+        if let Err(e) = update_timer_menu_item(&app, app_state.timer_started) {
+            eprintln!("Failed to update timer menu item: {}", e);
+        }
+
         app.emit("update-app-state", app_state.clone())
             .map_err(|e| e.to_string())?;
 
         app_state.timer_started
     };
-
-    let locked_sip_state = sip_state.lock().await;
-
-    if let Err(e) = update_tray_menu(&app, timer_started, &locked_sip_state) {
-        eprintln!("Failed to update tray menu: {}", e);
-    }
     Ok(())
+}
+
+// remember to call `.manage(MyState::default())`
+#[tauri::command]
+async fn get_app_state(
+    app_state: tauri::State<'_, SyncMutex<AppState>>,
+) -> Result<AppState, String> {
+    match app_state.lock() {
+        Ok(app_state) => Ok(app_state.clone()),
+        Err(e) => Err(format!("Failed to fetch sips: {}", e)),
+    }
+}
+
+#[tauri::command]
+async fn take_sip(
+    db_state: tauri::State<'_, DatabaseState>,
+    sip_state: tauri::State<'_, Mutex<SipState>>,
+) -> Result<SipState, String> {
+    let pool = &db_state.0;
+
+    let mut locked_sip_state = sip_state.lock().await;
+
+    match locked_sip_state.take_sip(50, pool).await {
+        Ok(new_state) => {
+            let state_to_return = new_state.clone();
+            *locked_sip_state = new_state;
+            Ok(state_to_return)
+        }
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![get_sips, toggle_timer])
+        .invoke_handler(tauri::generate_handler![
+            get_sips,
+            toggle_timer,
+            take_sip,
+            get_app_state
+        ])
         .setup(|app| {
             let app_settings = AppSettings::load();
             app.manage(app_settings);
 
             // Minimize the main window on startup
-            if let Some(window) = app.get_webview_window("main") {
+            if let Some(_window) = app.get_webview_window("main") {
                 //let _ = window.minimize();
                 //let _ = window.hide();
             }
-
-            println!("tray icon built");
 
             init_db();
 
@@ -236,104 +198,46 @@ pub fn run() {
 
             let app_handle = app.handle().clone();
 
-            let menu = get_menu_with_items(&app_handle, 0, false)?;
-
-            let tray_on_left_click = tauri_plugin_os::platform() == "macos";
-
-            _ = TrayIconBuilder::with_id("main")
-                .icon(app.default_window_icon().unwrap().clone())
-                .tooltip(app.package_info().name.clone())
-                .menu(&menu)
-                .show_menu_on_left_click(tray_on_left_click)
-                .on_menu_event(move |app, event| match event.id.as_ref() {
-                    "quit" => {
-                        println!("quit menu item was clicked");
-                        app.exit(0);
-                    }
-                    "show" => {
-                        println!("show menu item was clicked");
-                        //println!("{:#?}", app.get_webview_window("main").unwrap());
-                        toggle_window_visibility(app);
-                    }
-                    "start" => {
-                        use tauri::Emitter;
-
-                        println!("start menu item was clicked");
-                        let app_state = app.state::<SyncMutex<AppState>>();
-                        let mut app_state = app_state.lock().unwrap();
-                        if app_state.timer_started {
-                            app_state.stop_timer();
-                        } else {
-                            app_state.start_timer();
-                        }
-                        let sip_state = app.state::<Mutex<SipState>>();
-                        let locked_sip_state =
-                            tauri::async_runtime::block_on(async { sip_state.lock().await });
-                        if let Err(e) = update_tray_menu(
-                            &app_handle,
-                            app_state.timer_started,
-                            &locked_sip_state,
-                        ) {
-                            eprintln!("Failed to update tray menu: {}", e);
-                        }
-
-                        if let Err(e) = app_handle.emit("update-app-state", app_state.clone()) {
-                            eprintln!("Failed to update app_state: {}", e);
-                        }
-                    }
-                    "sip" => {
-                        println!("sip menu item was clicked");
-                        let db_state = app.state::<DatabaseState>();
-                        let pool = &db_state.0;
-
-                        let app_state = app.state::<SyncMutex<AppState>>();
-                        let app_state = app_state.lock().unwrap();
-
-                        let sip_state = app.state::<Mutex<SipState>>();
-
-                        let result = tauri::async_runtime::block_on(async {
-                            let mut locked_sip_state = sip_state.lock().await;
-
-                            match locked_sip_state.take_sip(50, pool).await {
-                                Ok(new_state) => {
-                                    *locked_sip_state = new_state;
-                                    println!("Updated sip state");
-
-                                    if let Err(e) = update_tray_menu(
-                                        &app_handle,
-                                        app_state.timer_started,
-                                        &locked_sip_state,
-                                    ) {
-                                        eprintln!("Failed to update tray menu: {}", e);
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!("Failed to take sip: {}", e);
-                                }
-                            }
-                        });
-
-                        println!("result {:#?}", result)
-                    }
-                    _ => {
-                        println!("menu item {:?} not handled", event.id);
-                    }
-                })
-                .on_tray_icon_event(|icon, event| match event {
-                    TrayIconEvent::DoubleClick {
-                        id: _,
-                        button: _,
-                        position: _,
-                        rect: _,
-                    } => {
-                        toggle_window_visibility(icon.app_handle());
-                    }
-                    _ => {}
-                })
-                .build(app)?;
+            create_tray(&app_handle)?;
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error building application");
+
+    #[cfg(target_os = "macos")]
+    app.set_activation_policy(tauri::ActivationPolicy::Regular);
+
+    app.run(|_app_handle, _event| match &_event {
+        RunEvent::ExitRequested { api, code, .. } => {
+            // Keep the event loop running even if all windows are closed
+            // This allow us to catch tray icon events when there is no window
+            // if we manually requested an exit (code is Some(_)) we will let it go through
+            match code {
+                Some(code) => println!("got code {code}"),
+                None => println!("got no code"),
+            };
+            if code.is_none() {
+                api.prevent_exit();
+            }
+        }
+        RunEvent::WindowEvent {
+            event: tauri::WindowEvent::CloseRequested { api, .. },
+            label,
+            ..
+        } => {
+            println!("closing window... {label}");
+            // run the window destroy manually just for fun :)
+            // usually you'd show a dialog here to ask for confirmation or whatever
+            api.prevent_close();
+            _app_handle
+                .get_webview_window(label)
+                .unwrap()
+                .hide()
+                .unwrap();
+        }
+        _ => {}
+    })
 }
+
+//https://github.com/tauri-apps/tauri/blob/dev/examples/api/src-tauri/src/tray.rs

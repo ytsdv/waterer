@@ -11,7 +11,7 @@ pub struct Sip {
     pub notified_user: bool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Serialize)]
 pub struct SipState {
     last_sip_timestamp: i64,
     total_sips_today: i64,
@@ -132,10 +132,3 @@ pub async fn get_sips(db_state: tauri::State<'_, DatabaseState>) -> Result<Vec<S
         Err(e) => Err(format!("Failed to fetch sips: {}", e)),
     }
 }
-
-// #[derive(Debug, Serialize)]
-// pub enum Error {
-//     String(String),
-// }
-
-// pub type Result<T> = std::result::Result<T, Error>;
