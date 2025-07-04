@@ -50,6 +50,7 @@ jobs:
         run: pnpm install
 
       - uses: tauri-apps/tauri-action@v0
+        id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -61,3 +62,48 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Create latest.json for update checking
+        if: matrix.platform == 'windows-latest' # Only run on one platform to avoid conflicts
+        run: |
+          # Extract version from package.json
+          VERSION=$(node -p "require('./package.json').version")
+
+          # Create latest.json with release information
+          cat > latest.json << EOF
+          {
+            "version": "$VERSION",
+            "notes": "See the assets to download this version and install.",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "",
+                "url": "https://github.com/${{ github.repository }}/releases/download/app-v$VERSION/waterer_${VERSION}_x64-setup.exe"
+              }
+            }
+          }
+          EOF
+
+          cat latest.json
+
+      - name: Update GitHub Gist with latest release info
+        if: matrix.platform == 'windows-latest' # Only run on one platform to avoid conflicts
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GIST_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const latestJson = fs.readFileSync('latest.json', 'utf8');
+
+            // Update the gist with the latest release information
+            // You need to replace 'YOUR_GIST_ID' with your actual gist ID
+            const gistId = '${{ secrets.GIST_ID }}';
+
+            await github.rest.gists.update({
+              gist_id: gistId,
+              files: {
+                'latest.json': {
+                  content: latestJson
+                }
+              }
+            });
