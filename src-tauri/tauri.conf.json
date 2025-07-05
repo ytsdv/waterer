@@ -40,7 +40,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFFMzMwQTNGRUYxNDBFRTUKUldUbERoVHZQd296cm5wYnp4YVkxampSekFaYlZNUkxmNTRXdE5ncDd4SG9IeXJWemN4MUZNSGgK",
       "endpoints": [
-        "https://github.com/ytsdv/waterer/releases/latest/download/latest.json"
+        "https://gist.githubusercontent.com/ytsdv/d2775fb9c29e99023eea612a6217a711/raw/f743434bda49c7986f5cc42e3dfed2f63e004753/latest.json"
       ]
     }
   }
