@@ -4,7 +4,21 @@ use tauri_plugin_updater::UpdaterExt;
 pub async fn update(app: tauri::AppHandle) -> tauri_plugin_updater::Result<()> {
     if let Some(update) = app.updater()?.check().await? {
         let mut downloaded = 0;
+        let answer = app
+            .dialog()
+            .message("An update is available. Would you like to install it??")
+            .title("Update Available")
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                "Install".to_string(),
+                "Cancel".to_string(),
+            ))
+            .blocking_show();
 
+        println!("answer: {:?}", answer);
+
+        if !answer {
+            return Ok(());
+        }
         // alternatively we could also call update.download() and update.install() separately
         let downloaded_update = update
             .download(
@@ -17,19 +31,8 @@ pub async fn update(app: tauri::AppHandle) -> tauri_plugin_updater::Result<()> {
                 },
             )
             .await?;
-        let answer = app
-            .dialog()
-            .message("An update is available. Would you like to install it??")
-            .title("Update Available")
-            .buttons(MessageDialogButtons::OkCancelCustom(
-                "Install".to_string(),
-                "Cancel".to_string(),
-            ))
-            .blocking_show();
-        if answer {
-            update.install(downloaded_update)?;
-            println!("update installed");
-        }
+
+        update.install(downloaded_update)?;
         app.restart();
     }
 

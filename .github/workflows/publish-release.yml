@@ -67,8 +67,8 @@ jobs:
         if: matrix.platform == 'windows-latest' # Only run on one platform to avoid conflicts
         shell: bash
         run: |
-          # Extract version from package.json
-          VERSION=$(node -p "require('./package.json').version")
+          # Extract version from tauri.conf.json
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
 
           # Create latest.json with release information
           cat > latest.json << EOF
