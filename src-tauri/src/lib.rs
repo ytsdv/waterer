@@ -9,6 +9,7 @@ mod notification;
 mod settings;
 mod sip;
 mod tray;
+mod update;
 
 use crate::{
     db::DatabaseState,
@@ -16,6 +17,7 @@ use crate::{
     settings::AppSettings,
     sip::{get_sips, SipState},
     tray::{create_tray, update_timer_menu_item},
+    update::update,
 };
 
 #[derive(Serialize, Clone)]
@@ -106,7 +108,10 @@ async fn take_sip(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    env_logger::init();
+
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_notification::init())
@@ -121,11 +126,12 @@ pub fn run() {
             let app_settings = AppSettings::load();
             app.manage(app_settings);
 
-            // Minimize the main window on startup
-            if let Some(_window) = app.get_webview_window("main") {
-                //let _ = window.minimize();
-                //let _ = window.hide();
-            }
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                update(app_handle).await.unwrap_or_else(|e| {
+                    eprintln!("Failed to check for updates: {}", e);
+                });
+            });
 
             init_db();
 

@@ -43,12 +43,18 @@ jobs:
         # webkitgtk 4.0 is for Tauri v1 - webkitgtk 4.1 is for Tauri v2.
         # You can remove the one that doesn't apply to your app to speed up the workflow a bit.
 
-      - name: install frontend dependencies
-        run: pnpm install # change this to npm, pnpm or bun depending on which one you use.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install frontend dependencies
+        run: pnpm install
 
       - uses: tauri-apps/tauri-action@v0
+        id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: app-v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
           releaseName: "App v__VERSION__"
@@ -56,3 +62,56 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Create latest.json for update checking
+        if: matrix.platform == 'windows-latest' # Only run on one platform to avoid conflicts
+        shell: bash
+        run: |
+          # Extract version from package.json
+          VERSION=$(node -p "require('./package.json').version")
+
+          # Create latest.json with release information
+          cat > latest.json << EOF
+          {
+            "version": "$VERSION",
+            "notes": "See the assets to download this version and install.",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "",
+                "url": "https://github.com/${{ github.repository }}/releases/download/app-v$VERSION/waterer_${VERSION}_x64-setup.exe"
+              }
+            }
+          }
+          EOF
+
+          cat latest.json
+      - name: Deploy latest.json to Gist
+        if: matrix.platform == 'windows-latest' # Only run on one platform to avoid conflicts
+        uses: exuanbo/actions-deploy-gist@v1
+        with:
+          token: ${{ secrets.GIST_TOKEN }}
+          gist_id: ${{ secrets.GIST_ID }}
+          file_path: latest.json
+          file_type: text
+      # - name: Update GitHub Gist with latest release info
+      #   if: matrix.platform == 'windows-latest' # Only run on one platform to avoid conflicts
+      #   uses: actions/github-script@v7
+      #   with:
+      #     github-token: ${{ secrets.GITHUB_TOKEN }}
+      #     script: |
+      #       const fs = require('fs');
+      #       const latestJson = fs.readFileSync('latest.json', 'utf8');
+
+      #       // Update the gist with the latest release information
+      #       // You need to replace 'YOUR_GIST_ID' with your actual gist ID
+      #       const gistId = '${{ secrets.GIST_ID }}';
+
+      #       await github.rest.gists.update({
+      #         gist_id: gistId,
+      #         files: {
+      #           'latest.json': {
+      #             content: latestJson
+      #           }
+      #         }
+      #       });
