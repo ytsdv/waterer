@@ -86,25 +86,32 @@ jobs:
           EOF
 
           cat latest.json
-
-      - name: Update GitHub Gist with latest release info
+      - name: Deploy latest.json to Gist
         if: matrix.platform == 'windows-latest' # Only run on one platform to avoid conflicts
-        uses: actions/github-script@v7
+        uses: exuanbo/actions-deploy-gist@v1
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const latestJson = fs.readFileSync('latest.json', 'utf8');
+          token: ${{ secrets.GIST_TOKEN }}
+          gist_id: ${{ secrets.GIST_ID }}
+          file_path: latest.json
+          file_type: text
+      # - name: Update GitHub Gist with latest release info
+      #   if: matrix.platform == 'windows-latest' # Only run on one platform to avoid conflicts
+      #   uses: actions/github-script@v7
+      #   with:
+      #     github-token: ${{ secrets.GITHUB_TOKEN }}
+      #     script: |
+      #       const fs = require('fs');
+      #       const latestJson = fs.readFileSync('latest.json', 'utf8');
 
-            // Update the gist with the latest release information
-            // You need to replace 'YOUR_GIST_ID' with your actual gist ID
-            const gistId = '${{ secrets.GIST_ID }}';
+      #       // Update the gist with the latest release information
+      #       // You need to replace 'YOUR_GIST_ID' with your actual gist ID
+      #       const gistId = '${{ secrets.GIST_ID }}';
 
-            await github.rest.gists.update({
-              gist_id: gistId,
-              files: {
-                'latest.json': {
-                  content: latestJson
-                }
-              }
-            });
+      #       await github.rest.gists.update({
+      #         gist_id: gistId,
+      #         files: {
+      #           'latest.json': {
+      #             content: latestJson
+      #           }
+      #         }
+      #       });
