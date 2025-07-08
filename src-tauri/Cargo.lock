@@ -5578,6 +5578,7 @@ dependencies = [
 name = "waterer"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "dirs",
  "env_logger",

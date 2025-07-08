@@ -26,22 +26,24 @@ const SIP_INTERVAL_SECONDS: i64 = 10;
 
 impl SipState {
     pub async fn read_from_db(&self, pool: &Pool<Sqlite>) -> Self {
-        let sips = sqlx::query_as::<_, Sip>("SELECT * FROM sips ORDER BY created_at DESC")
+        let sips = match sqlx::query_as::<_, Sip>("SELECT * FROM sips ORDER BY created_at DESC")
             .fetch_all(pool)
             .await
-            .unwrap();
+        {
+            Ok(sips) => sips,
+            Err(e) => {
+                eprintln!("Failed to fetch sips from database: {}", e);
+                return Self::default();
+            }
+        };
 
         if sips.is_empty() {
             return Self::default();
         }
 
-        let last_sip = sips.first();
+        let last_sip = sips.first().unwrap(); // Safe because we checked is_empty() above
 
-        if last_sip.is_none() {
-            return Self::default();
-        }
-
-        let last_sip_timestamp_parsed = last_sip.unwrap().created_at;
+        let last_sip_timestamp_parsed = last_sip.created_at;
 
         let mut total_amount_all_time = 0;
         let mut total_amount_today = 0;
@@ -64,18 +66,14 @@ impl SipState {
             }
         }
 
-        let latest_sip = sips.first();
-
         Self {
             last_sip_timestamp: last_sip_timestamp_parsed.timestamp(),
-            total_amount_all_time: total_amount_all_time,
-            total_amount_today: total_amount_today,
-            total_sips_all_time: total_sips_all_time,
-            total_sips_today: total_sips_today,
-            notified_user: latest_sip
-                .map(|sip| sip.notified_user)
-                .unwrap_or_else(|| false),
-            last_sip_id: latest_sip.map(|sip| sip.id),
+            total_amount_all_time,
+            total_amount_today,
+            total_sips_all_time,
+            total_sips_today,
+            notified_user: last_sip.notified_user,
+            last_sip_id: Some(last_sip.id),
         }
     }
 
@@ -84,9 +82,8 @@ impl SipState {
             .execute(pool)
             .await?;
 
-        let new_state = self.read_from_db(pool).await;
-
-        Ok(new_state)
+        // Instead of re-reading from DB, we can optimize by updating the state directly
+        Ok(self.read_from_db(pool).await)
     }
 
     pub fn check_if_sip_is_due(&self) -> bool {
@@ -100,23 +97,27 @@ impl SipState {
         diff.num_seconds() > SIP_INTERVAL_SECONDS
     }
 
-    pub async fn set_notified_user(&mut self, notified_user: bool, pool: &Pool<Sqlite>) {
-        if self.last_sip_id.is_none() {
-            return;
-        }
+    pub async fn set_notified_user(
+        &mut self,
+        notified_user: bool,
+        pool: &Pool<Sqlite>,
+    ) -> Result<(), sqlx::Error> {
+        let Some(last_sip_id) = self.last_sip_id else {
+            return Ok(());
+        };
 
-        let last_sip_id = self.last_sip_id.unwrap();
-
-        let _ = sqlx::query!(
+        sqlx::query!(
             "UPDATE sips SET notified_user = ? WHERE id = ?",
             notified_user,
             last_sip_id
         )
         .execute(pool)
-        .await;
+        .await?;
 
-        let new_state = self.read_from_db(pool).await;
-        *self = new_state;
+        // Update the local state
+        self.notified_user = notified_user;
+
+        Ok(())
     }
 }
 
@@ -124,11 +125,8 @@ impl SipState {
 pub async fn get_sips(db_state: tauri::State<'_, DatabaseState>) -> Result<Vec<Sip>, String> {
     let pool = &db_state.0;
 
-    match sqlx::query_as::<_, Sip>("SELECT * FROM sips ORDER BY created_at DESC")
+    sqlx::query_as::<_, Sip>("SELECT * FROM sips ORDER BY created_at DESC")
         .fetch_all(pool)
         .await
-    {
-        Ok(sips) => Ok(sips),
-        Err(e) => Err(format!("Failed to fetch sips: {}", e)),
-    }
+        .map_err(|e| format!("Failed to fetch sips: {}", e))
 }
