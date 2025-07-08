@@ -77,7 +77,7 @@ impl SipState {
         }
     }
 
-    pub async fn take_sip(&self, amount: i64, pool: &Pool<Sqlite>) -> Result<Self, sqlx::Error> {
+    pub async fn take_sip(&self, amount: i64, pool: &Pool<Sqlite>) -> anyhow::Result<Self> {
         sqlx::query!("INSERT INTO sips (amount) VALUES (?)", amount)
             .execute(pool)
             .await?;
@@ -101,7 +101,7 @@ impl SipState {
         &mut self,
         notified_user: bool,
         pool: &Pool<Sqlite>,
-    ) -> Result<(), sqlx::Error> {
+    ) -> anyhow::Result<()> {
         let Some(last_sip_id) = self.last_sip_id else {
             return Ok(());
         };

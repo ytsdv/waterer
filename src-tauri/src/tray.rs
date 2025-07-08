@@ -12,10 +12,7 @@ use crate::{db::DatabaseState, sip::SipState, AppState};
 static MENU_ITEMS: SyncMutex<Option<(MenuItem<tauri::Wry>, MenuItem<tauri::Wry>)>> =
     SyncMutex::new(None);
 
-pub fn update_timer_menu_item(
-    _app_handle: &AppHandle,
-    timer_started: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn update_timer_menu_item(_app_handle: &AppHandle, timer_started: bool) -> anyhow::Result<()> {
     if let Ok(guard) = MENU_ITEMS.lock() {
         if let Some((timer_item, _)) = guard.as_ref() {
             let text = if timer_started {
@@ -29,10 +26,7 @@ pub fn update_timer_menu_item(
     Ok(())
 }
 
-pub fn update_sip_menu_item(
-    _app_handle: &AppHandle,
-    total_amount: i64,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn update_sip_menu_item(_app_handle: &AppHandle, total_amount: i64) -> anyhow::Result<()> {
     if let Ok(guard) = MENU_ITEMS.lock() {
         if let Some((_, sip_item)) = guard.as_ref() {
             let text = format!("Sip ({}ml today)", total_amount);
@@ -42,7 +36,7 @@ pub fn update_sip_menu_item(
     Ok(())
 }
 
-pub fn create_tray(app_handle: &AppHandle) -> tauri::Result<()> {
+pub fn create_tray(app_handle: &AppHandle) -> anyhow::Result<()> {
     let timer_started = {
         let app_state = app_handle.state::<SyncMutex<AppState>>();
         let app_state = app_state.lock().unwrap();

@@ -81,7 +81,7 @@ impl AppSettings {
         }
     }
 
-    pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn save(&self) -> anyhow::Result<()> {
         let config_path = Self::config_path();
 
         if let Some(parent) = config_path.parent() {
