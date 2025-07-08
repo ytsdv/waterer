@@ -4,12 +4,14 @@ import { getContext, setContext } from "svelte";
 export interface Settings {
   sipAmountMl: number;
   notificationIntervalMinutes: number;
+  updateCheckIntervalHours: number;
 }
 
 class SettingsState {
   settings = $state<Settings>({
     sipAmountMl: 50,
     notificationIntervalMinutes: 10,
+    updateCheckIntervalHours: 24,
   });
   loading = $state(false);
   error = $state("");
@@ -31,6 +33,10 @@ class SettingsState {
       const savedSettings = localStorage.getItem("waterer-settings");
       if (savedSettings) {
         this.settings = JSON.parse(savedSettings);
+        // Ensure new settings have defaults if they don't exist
+        if (this.settings.updateCheckIntervalHours === undefined) {
+          this.settings.updateCheckIntervalHours = 24;
+        }
       }
     } catch (err) {
       this.error = `Failed to load settings: ${err}`;
@@ -71,6 +77,13 @@ class SettingsState {
     this.settings.notificationIntervalMinutes = Math.max(
       1,
       Math.min(180, minutes)
+    );
+  }
+
+  updateUpdateCheckInterval(hours: number) {
+    this.settings.updateCheckIntervalHours = Math.max(
+      1,
+      Math.min(168, hours) // Max 1 week
     );
   }
 }

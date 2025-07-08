@@ -1,16 +1,21 @@
 <script lang="ts">
-  import { Button, ErrorMessage, Input, Select } from "$lib/components";
+  import { AppHeader, Button, ErrorMessage, Input, Select } from "$lib/components";
   import { goto } from "$app/navigation";
-  import { ArrowLeft, Save } from "@lucide/svelte";
+  import { ArrowLeft, Save, RefreshCw } from "@lucide/svelte";
   import { getSettingsState } from "$lib/SettingsState.svelte";
   import { getThemeState, type Theme } from "$lib/ThemeState.svelte";
+  import { getUpdateState } from "$lib/UpdateState.svelte";
 
   const settingsState = getSettingsState();
   const themeState = getThemeState();
+  const updateState = getUpdateState();
 
   let sipAmount = $state(settingsState.settings.sipAmountMl);
   let notificationInterval = $state(
     settingsState.settings.notificationIntervalMinutes
+  );
+  let updateCheckInterval = $state(
+    settingsState.settings.updateCheckIntervalHours
   );
   let selectedTheme = $state<Theme>(themeState.theme);
   let success = $state("");
@@ -25,6 +30,7 @@
   $effect(() => {
     sipAmount = settingsState.settings.sipAmountMl;
     notificationInterval = settingsState.settings.notificationIntervalMinutes;
+    updateCheckInterval = settingsState.settings.updateCheckIntervalHours;
     selectedTheme = themeState.theme;
   });
 
@@ -42,6 +48,7 @@
       await settingsState.saveSettings({
         sipAmountMl: sipAmount,
         notificationIntervalMinutes: notificationInterval,
+        updateCheckIntervalHours: updateCheckInterval,
       });
 
       success = "Settings saved successfully!";
@@ -53,6 +60,10 @@
     }
   }
 
+  async function checkForUpdatesNow() {
+    await updateState.checkForUpdates();
+  }
+
   function goBack() {
     goto("/");
   }
@@ -61,6 +72,8 @@
 <main
   class="mx-auto px-8 max-w-2xl h-screen sm:px-4 overflow-y-auto flex flex-col"
 >
+  <AppHeader />
+
   <div class="flex items-center gap-4 mb-6">
     <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
       Settings
@@ -113,6 +126,57 @@
         placeholder="Enter interval in minutes"
         helpText="How often you want to be reminded to drink water (1-180 minutes)"
       />
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-6">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+      Update Settings
+    </h2>
+
+    <div class="space-y-6">
+      <!-- Update Check Interval -->
+      <Input
+        label="Update Check Interval (hours)"
+        type="number"
+        min={1}
+        max={168}
+        bind:value={updateCheckInterval}
+        placeholder="Enter interval in hours"
+        helpText="How often to check for updates automatically (1-168 hours)"
+      />
+
+      <!-- Manual Update Check -->
+      <div class="flex flex-col space-y-2">
+        <label class="text-sm font-medium text-gray-900 dark:text-gray-100">
+          Manual Check
+        </label>
+        <div class="flex items-center justify-between">
+          <div class="text-sm text-gray-600 dark:text-gray-400">
+            Last checked: {updateState.formattedLastChecked}
+            {#if updateState.hasUpdateAvailable}
+              <span class="text-blue-600 dark:text-blue-400 font-medium">
+                • Update available: v{updateState.currentVersion}
+              </span>
+            {/if}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onclick={checkForUpdatesNow}
+            disabled={updateState.isChecking}
+            class="flex items-center gap-1"
+          >
+            <RefreshCw class="w-3 h-3 {updateState.isChecking ? 'animate-spin' : ''}" />
+            {updateState.isChecking ? "Checking..." : "Check Now"}
+          </Button>
+        </div>
+        {#if updateState.error}
+          <p class="text-xs text-red-600 dark:text-red-400">
+            {updateState.error}
+          </p>
+        {/if}
+      </div>
     </div>
   </div>
 

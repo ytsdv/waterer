@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import {
+    AppHeader,
     StatCard,
     Button,
     ErrorMessage,
@@ -20,6 +21,8 @@
 <main
   class="mx-auto px-8 max-w-4xl h-screen sm:px-4 overflow-y-auto flex flex-col"
 >
+  <AppHeader />
+  
   <div class="flex gap-4 mb-8 justify-center items-center">
     <StatCard title="Total Sips" value={sipState.sips.length} />
     <StatCard title="Total Amount" value="{sipState.totalAmount}ml" />
