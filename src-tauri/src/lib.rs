@@ -17,18 +17,20 @@ use crate::{
     settings::AppSettings,
     sip::{get_sips, SipState},
     tray::{create_tray, update_timer_menu_item},
-    update::update,
+    update::{update, check_for_updates, install_update},
 };
 
 #[derive(Serialize, Clone)]
 struct AppState {
     timer_started: bool,
+    last_update_check: Option<std::time::SystemTime>,
 }
 
 impl AppState {
     fn new() -> Self {
         Self {
             timer_started: false,
+            last_update_check: None,
         }
     }
 
@@ -41,6 +43,20 @@ impl AppState {
     fn stop_timer(&mut self) {
         if self.timer_started {
             self.timer_started = false;
+        }
+    }
+
+    fn update_last_update_check(&mut self) {
+        self.last_update_check = Some(std::time::SystemTime::now());
+    }
+
+    fn should_check_for_updates(&self, interval_hours: u64) -> bool {
+        match self.last_update_check {
+            Some(last_check) => {
+                let elapsed = last_check.elapsed().unwrap_or(Duration::from_secs(0));
+                elapsed >= Duration::from_secs(interval_hours * 3600)
+            }
+            None => true, // Never checked before
         }
     }
 }
@@ -106,6 +122,15 @@ async fn take_sip(
     }
 }
 
+// Command to get update check interval from frontend settings
+#[tauri::command]
+async fn get_update_check_interval() -> Result<u64, String> {
+    // Since settings are currently stored in localStorage on frontend,
+    // we'll return a default value and let the frontend manage this
+    // TODO: When backend settings are implemented, get from there
+    Ok(24) // Default 24 hours
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
@@ -120,18 +145,14 @@ pub fn run() {
             get_sips,
             toggle_timer,
             take_sip,
-            get_app_state
+            get_app_state,
+            check_for_updates,
+            install_update,
+            get_update_check_interval
         ])
         .setup(|app| {
             let app_settings = AppSettings::load();
             app.manage(app_settings);
-
-            let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                update(app_handle).await.unwrap_or_else(|e| {
-                    eprintln!("Failed to check for updates: {}", e);
-                });
-            });
 
             init_db();
 
@@ -162,6 +183,7 @@ pub fn run() {
             // Clone the app handle so it can be moved into the spawned task
             let app_handle = app.handle().clone();
 
+            // Spawn sip timer task
             let _ = tauri::async_runtime::spawn(async move {
                 let mut interval = tokio::time::interval(Duration::from_secs(1));
 
@@ -173,19 +195,15 @@ pub fn run() {
                     };
 
                     interval.tick().await;
-                    println!("Tick");
 
                     let sip_state = app_handle.state::<Mutex<SipState>>();
                     let mut locked_sip_state = sip_state.lock().await;
-                    //
 
                     if !timer_started {
                         continue;
                     }
 
                     if locked_sip_state.check_if_sip_is_due() {
-                        println!("Sip is due");
-                        println!("notified_user {:#?}", locked_sip_state.notified_user);
                         if !locked_sip_state.notified_user {
                             match notify_sip(&app_handle) {
                                 Ok(_) => {
@@ -196,10 +214,75 @@ pub fn run() {
                                 }
                             }
                         }
-                    } else {
-                        println!("Sip is not due");
-                        println!("notified_user {:#?}", locked_sip_state.notified_user);
                     }
+                }
+            });
+
+            // Spawn update check task
+            let app_handle_for_updates = app.handle().clone();
+            let _ = tauri::async_runtime::spawn(async move {
+                let mut update_check_interval = tokio::time::interval(Duration::from_secs(300)); // Check every 5 minutes if updates are due
+
+                loop {
+                    update_check_interval.tick().await;
+                    
+                    // Check if we should check for updates
+                    let should_check = {
+                        let app_state = app_handle_for_updates.state::<SyncMutex<AppState>>();
+                        let app_state = app_state.lock().unwrap();
+                        
+                        // Default to 24 hours if no setting is available
+                        let update_interval_hours = 24; // TODO: Get this from settings when implemented
+                        app_state.should_check_for_updates(update_interval_hours)
+                    };
+
+                    if should_check {
+                        // Update the last check time
+                        {
+                            let app_state = app_handle_for_updates.state::<SyncMutex<AppState>>();
+                            let mut app_state = app_state.lock().unwrap();
+                            app_state.update_last_update_check();
+                        }
+
+                        // Perform update check
+                        match check_for_updates(app_handle_for_updates.clone()).await {
+                            Ok(update_info) => {
+                                if update_info.available {
+                                    use tauri::Emitter;
+                                    let _ = app_handle_for_updates.emit("update-available", update_info);
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Periodic update check failed: {}", e);
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Initial update check on startup
+            let app_handle_initial = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Wait a bit for app to fully initialize
+                tokio::time::sleep(Duration::from_secs(3)).await;
+                
+                match check_for_updates(app_handle_initial.clone()).await {
+                    Ok(update_info) => {
+                        if update_info.available {
+                            use tauri::Emitter;
+                            let _ = app_handle_initial.emit("update-available", update_info);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Initial update check failed: {}", e);
+                    }
+                }
+                
+                // Mark that we've done an initial check
+                {
+                    let app_state = app_handle_initial.state::<SyncMutex<AppState>>();
+                    let mut app_state = app_state.lock().unwrap();
+                    app_state.update_last_update_check();
                 }
             });
 
