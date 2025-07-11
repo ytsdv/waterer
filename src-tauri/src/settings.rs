@@ -1,11 +1,16 @@
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::{Path, PathBuf}, sync::Mutex,
 };
 
 use serde::{Deserialize, Serialize};
+use tauri::State;
+
+use crate::IgnorePoisoned;
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub timer_interval_ms: u64,
     pub sip_amount_ml: i64,
@@ -102,4 +107,63 @@ impl AppSettings {
             && self.sip_amount_ml <= 1000 // Max 1L per sip
             && self.daily_goal_ml <= 10000 // Max 10L per day
     }
+
+    pub fn update_with_partial(&mut self,partial: PartialAppSettings ) -> anyhow::Result<()> {
+        if let Some(timer_interval_ms) = partial.timer_interval_ms {
+            self.timer_interval_ms = timer_interval_ms;
+        }
+        if let Some(sip_amount_ml) = partial.sip_amount_ml {
+            self.sip_amount_ml = sip_amount_ml;
+        }
+        if let Some(notifications_enabled) = partial.notifications_enabled {
+            self.notifications_enabled = notifications_enabled;
+        }
+        if let Some(start_minimized) = partial.start_minimized {
+            self.start_minimized = start_minimized;
+        }
+        if let Some(daily_goal_ml) = partial.daily_goal_ml {
+            self.daily_goal_ml = daily_goal_ml;
+        }
+        
+        // Validate the updated settings
+        if !self.is_valid() {
+            return Err(anyhow::anyhow!("Invalid settings after update"));
+        }
+
+        return Ok(());   
+    }
+}
+
+#[derive(Serialize,Deserialize,Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PartialAppSettings {
+    pub timer_interval_ms: Option<u64>,
+    pub sip_amount_ml: Option<i64>,
+    pub notifications_enabled: Option<bool>,
+    pub start_minimized: Option<bool>,
+    pub daily_goal_ml: Option<i64>,
+}
+
+#[tauri::command]
+pub fn get_settings(settings: State<Mutex<AppSettings>>) -> AppSettings {
+    let settings = settings.lock().ignore_poisoned();
+    settings.clone()
+}
+
+#[tauri::command]
+pub fn update_settings(current_settings: State<Mutex<AppSettings>>, settings: PartialAppSettings) -> Result<AppSettings, String> {
+    dbg!(&current_settings);
+    dbg!(&settings);
+
+    let mut current_settings = current_settings.lock().ignore_poisoned();
+
+    current_settings.update_with_partial(settings).map_err(|e| e.to_string())?;
+    current_settings.save().map_err(|e| e.to_string())?;
+
+  Ok(current_settings.clone())
+}
+
+#[tauri::command]
+fn save_settings(settings: AppSettings) -> anyhow::Result<()> {
+    settings.save()
 }

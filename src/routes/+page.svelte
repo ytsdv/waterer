@@ -22,7 +22,18 @@
 >
   <div class="flex gap-4 mb-8 justify-center items-center">
     <StatCard title="Total Sips" value={sipState.sips.length} />
-    <StatCard title="Total Amount" value="{sipState.totalAmount}ml" />
+    <StatCard title="Daily Progress">
+      <div
+        class={sipState.totalAmount >= settingsState.settings.dailyGoalMl
+          ? "text-green-600 dark:text-green-400"
+          : "text-primary-600 dark:text-primary-400"}
+      >
+        <span>
+          {sipState.totalAmount}ml
+        </span>
+        <span> / {settingsState.settings.dailyGoalMl}ml</span>
+      </div>
+    </StatCard>
   </div>
 
   <div class="flex gap-4 mb-8 justify-center items-center">

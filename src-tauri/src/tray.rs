@@ -6,6 +6,8 @@ use tauri::{
 };
 use tokio::sync::Mutex;
 
+use crate::settings::AppSettings;
+use crate::IgnorePoisoned;
 use crate::{db::DatabaseState, sip::SipState, AppState};
 
 // Global storage for menu items so they can be updated from anywhere
@@ -135,7 +137,13 @@ pub fn create_tray(app_handle: &AppHandle) -> anyhow::Result<()> {
                     let sip_state = app.state::<Mutex<SipState>>();
                     let mut locked_sip_state = sip_state.lock().await;
 
-                    match locked_sip_state.take_sip(50, pool).await {
+                    let settings = app.state::<SyncMutex<AppSettings>>();
+                    let settings = settings.lock().ignore_poisoned();
+
+                    match locked_sip_state
+                        .take_sip(settings.sip_amount_ml, pool)
+                        .await
+                    {
                         Ok(new_state) => {
                             *locked_sip_state = new_state;
                             println!("Updated sip state");

@@ -1,4 +1,4 @@
-use std::sync::Mutex as SyncMutex;
+use std::sync::{Mutex as SyncMutex, PoisonError};
 
 use serde::Serialize;
 use tauri::{Manager, RunEvent};
@@ -14,7 +14,7 @@ mod update;
 use crate::{
     db::DatabaseState,
     notification::notify_sip,
-    settings::AppSettings,
+    settings::{get_settings, update_settings, AppSettings},
     sip::{get_sips, SipState},
     tray::{create_tray, update_timer_menu_item},
     update::update,
@@ -91,12 +91,19 @@ async fn get_app_state(
 async fn take_sip(
     db_state: tauri::State<'_, DatabaseState>,
     sip_state: tauri::State<'_, Mutex<SipState>>,
+    settings: tauri::State<'_, SyncMutex<AppSettings>>,
 ) -> Result<SipState, String> {
     let pool = &db_state.0;
 
+    let sip_amount = {
+        let settings = settings.lock();
+        let settings = settings.ignore_poisoned();
+        settings.sip_amount_ml
+    };
+
     let mut locked_sip_state = sip_state.lock().await;
 
-    match locked_sip_state.take_sip(50, pool).await {
+    match locked_sip_state.take_sip(sip_amount, pool).await {
         Ok(new_state) => {
             let state_to_return = new_state.clone();
             *locked_sip_state = new_state;
@@ -120,11 +127,13 @@ pub fn run() {
             get_sips,
             toggle_timer,
             take_sip,
-            get_app_state
+            get_app_state,
+            update_settings,
+            get_settings
         ])
         .setup(|app| {
             let app_settings = AppSettings::load();
-            app.manage(app_settings);
+            app.manage(SyncMutex::new(app_settings));
 
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -173,11 +182,9 @@ pub fn run() {
                     };
 
                     interval.tick().await;
-                    println!("Tick");
 
                     let sip_state = app_handle.state::<Mutex<SipState>>();
                     let mut locked_sip_state = sip_state.lock().await;
-                    //
 
                     if !timer_started {
                         continue;
@@ -248,3 +255,13 @@ pub fn run() {
 }
 
 //https://github.com/tauri-apps/tauri/blob/dev/examples/api/src-tauri/src/tray.rs
+
+trait IgnorePoisoned<T> {
+    fn ignore_poisoned(self) -> T;
+}
+
+impl<T> IgnorePoisoned<T> for Result<T, PoisonError<T>> {
+    fn ignore_poisoned(self) -> T {
+        self.expect("poisoned")
+    }
+}

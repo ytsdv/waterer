@@ -14,7 +14,7 @@
   );
   let selectedTheme = $state<Theme>(themeState.theme);
   let success = $state("");
-
+  let dailyGoal = $state(settingsState.settings.dailyGoalMl);
   const themeOptions = [
     { value: "light", label: "Light" },
     { value: "dark", label: "Dark" },
@@ -25,6 +25,7 @@
   $effect(() => {
     sipAmount = settingsState.settings.sipAmountMl;
     notificationInterval = settingsState.settings.notificationIntervalMinutes;
+    dailyGoal = settingsState.settings.dailyGoalMl;
     selectedTheme = themeState.theme;
   });
 
@@ -42,6 +43,7 @@
       await settingsState.saveSettings({
         sipAmountMl: sipAmount,
         notificationIntervalMinutes: notificationInterval,
+        dailyGoalMl: dailyGoal,
       });
 
       success = "Settings saved successfully!";
@@ -102,13 +104,22 @@
         placeholder="Enter sip amount in ml"
         helpText="Amount of water recorded when you take a sip (1-500 ml)"
       />
-
+      <Input
+        label="Daily Goal (ml)"
+        type="number"
+        min={1000}
+        max={5000}
+        bind:value={dailyGoal}
+        placeholder="Enter daily goal in ml"
+        helpText="How much water you want to drink daily (1-5000 ml)"
+      />
       <!-- Notification Interval -->
       <Input
         label="Notification Interval (minutes)"
         type="number"
         min={1}
         max={180}
+        disabled
         bind:value={notificationInterval}
         placeholder="Enter interval in minutes"
         helpText="How often you want to be reminded to drink water (1-180 minutes)"
