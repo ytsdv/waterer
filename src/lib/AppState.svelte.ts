@@ -9,10 +9,14 @@ type TAppState = {
 
 type UpdateAppStateEventPayload = {
   timer_started: boolean;
+  session_id: number;
+  session_start: string;
 };
 
 export class AppState implements TAppState {
   timerStarted: boolean = $state(false);
+  sessionId: number = $state(0);
+  sessionStart: string = $state("");
 
   constructor() {
     this.updateAppState();
@@ -23,6 +27,8 @@ export class AppState implements TAppState {
         (event) => {
           console.log("timer", event.payload.timer_started);
           this.timerStarted = event.payload.timer_started;
+          this.sessionId = event.payload.session_id;
+          this.sessionStart = event.payload.session_start;
         }
       );
 
@@ -36,6 +42,8 @@ export class AppState implements TAppState {
     try {
       const result = await invoke<UpdateAppStateEventPayload>("get_app_state");
       this.timerStarted = result.timer_started;
+      this.sessionId = result.session_id;
+      this.sessionStart = result.session_start;
     } catch (err) {
       console.error("Failed to load app state:", err);
     }

@@ -6,8 +6,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::IgnorePoisoned;
-
+use crate::{state::SettingsState, IgnorePoisoned};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -145,7 +144,7 @@ pub struct PartialAppSettings {
 }
 
 #[tauri::command]
-pub fn get_settings(settings: State<Mutex<AppSettings>>) -> AppSettings {
+pub fn get_settings(settings: State<SettingsState>) -> AppSettings {
     let settings = settings.lock().ignore_poisoned();
     settings.clone()
 }

@@ -30,6 +30,9 @@
         Start Timer
       {/if}
     </button>
+    <span class="text-xs font-medium text-primary-700 dark:text-primary-100">
+      {new Date(appState.sessionStart).toLocaleString()}
+    </span>
   </div>
   {#if !isSettingsPage}
     <div>

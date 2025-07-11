@@ -7,6 +7,7 @@ use tauri::{
 use tokio::sync::Mutex;
 
 use crate::settings::AppSettings;
+use crate::state::{AppTimerState, SettingsState, SipTrackingState};
 use crate::IgnorePoisoned;
 use crate::{db::DatabaseState, sip::SipState, AppState};
 
@@ -40,7 +41,7 @@ pub fn update_sip_menu_item(_app_handle: &AppHandle, total_amount: i64) -> anyho
 
 pub fn create_tray(app_handle: &AppHandle) -> anyhow::Result<()> {
     let timer_started = {
-        let app_state = app_handle.state::<SyncMutex<AppState>>();
+        let app_state = app_handle.state::<AppTimerState>();
         let app_state = app_state.lock().unwrap();
         app_state.timer_started
     };
@@ -57,7 +58,7 @@ pub fn create_tray(app_handle: &AppHandle) -> anyhow::Result<()> {
     let menu_item_timer = MenuItem::with_id(app_handle, "start", timer_text, true, None::<&str>)?;
 
     let total_sip_amount_today = {
-        let sip_state = app_handle.state::<Mutex<SipState>>();
+        let sip_state = app_handle.state::<SipTrackingState>();
         let locked_sip_state = tauri::async_runtime::block_on(async { sip_state.lock().await });
         locked_sip_state.total_amount_today
     };
@@ -111,7 +112,7 @@ pub fn create_tray(app_handle: &AppHandle) -> anyhow::Result<()> {
                 use tauri::Emitter;
 
                 println!("start menu item was clicked");
-                let app_state = app.state::<SyncMutex<AppState>>();
+                let app_state = app.state::<AppTimerState>();
                 let mut app_state = app_state.lock().unwrap();
                 if app_state.timer_started {
                     app_state.stop_timer();
@@ -134,14 +135,28 @@ pub fn create_tray(app_handle: &AppHandle) -> anyhow::Result<()> {
                 let pool = &db_state.0;
 
                 let result = tauri::async_runtime::block_on(async {
-                    let sip_state = app.state::<Mutex<SipState>>();
+                    let sip_state = app.state::<SipTrackingState>();
                     let mut locked_sip_state = sip_state.lock().await;
 
-                    let settings = app.state::<SyncMutex<AppSettings>>();
+                    let settings = app.state::<SettingsState>();
                     let settings = settings.lock().ignore_poisoned();
 
+                    let session_id = {
+                        let app_state = app.state::<AppTimerState>();
+                        let state = app_state.lock().ignore_poisoned();
+                        state.session_id
+                    };
+
+                    let session_id = match session_id {
+                        Some(id) => id,
+                        None => {
+                            eprintln!("No session ID available");
+                            return;
+                        }
+                    };
+
                     match locked_sip_state
-                        .take_sip(settings.sip_amount_ml, pool)
+                        .take_sip(settings.sip_amount_ml, pool, session_id)
                         .await
                     {
                         Ok(new_state) => {

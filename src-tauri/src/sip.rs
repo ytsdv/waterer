@@ -77,10 +77,19 @@ impl SipState {
         }
     }
 
-    pub async fn take_sip(&self, amount: i64, pool: &Pool<Sqlite>) -> anyhow::Result<Self> {
-        sqlx::query!("INSERT INTO sips (amount) VALUES (?)", amount)
-            .execute(pool)
-            .await?;
+    pub async fn take_sip(
+        &self,
+        amount: i64,
+        pool: &Pool<Sqlite>,
+        session_id: i64,
+    ) -> anyhow::Result<Self> {
+        sqlx::query!(
+            "INSERT INTO sips (amount, session_id) VALUES (?, ?)",
+            amount,
+            session_id
+        )
+        .execute(pool)
+        .await?;
 
         // Instead of re-reading from DB, we can optimize by updating the state directly
         Ok(self.read_from_db(pool).await)

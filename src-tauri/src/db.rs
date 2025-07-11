@@ -31,8 +31,6 @@ impl Database {
 }
 
 pub fn init_db() {
-    println!("INIT DB");
-
     let db_file_path = get_db_file_path();
 
     if !db_file_path.exists() {
@@ -42,7 +40,6 @@ pub fn init_db() {
 
 fn create_db_file() {
     let db_file_path = get_db_file_path();
-    println!("{:#?}", db_file_path);
 
     let db_directory = db_file_path.parent().unwrap();
 

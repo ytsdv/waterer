@@ -2,7 +2,7 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_updater::UpdaterExt;
 
 //TODO: check if anyhow error also gets the strings
-pub async fn update(app: tauri::AppHandle) -> anyhow::Result<()> {
+pub async fn update(app: &tauri::AppHandle) -> anyhow::Result<()> {
     if let Some(update) = app.updater()?.check().await? {
         let mut downloaded = 0;
         let answer = app
